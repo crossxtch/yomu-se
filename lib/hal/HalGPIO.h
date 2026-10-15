@@ -28,6 +28,9 @@ class HalGPIO {
 
   bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
 
+  // "x3", "x4", or "x4c". X4 Classic keeps DeviceType::X4: it is not an X3.
+  const char* shortName() const;
+
   // Page buttons on the left/right screen edges (X3) rather than an off-screen rocker.
   bool hasEdgeSideButtons() const;
   bool isXteinkDevice() const;

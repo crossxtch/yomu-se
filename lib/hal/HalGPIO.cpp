@@ -1,3 +1,4 @@
+#include <BatteryMonitor.h>
 #include <HalGPIO.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -39,18 +40,24 @@ bool readBQ27220CurrentMA(int16_t* outCurrent) {
 }  // namespace X3GPIO
 
 void HalGPIO::begin() {
-#if FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4
+#if FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4 && !FREEINK_DEVICE_X4CLASSIC
   _deviceType = DeviceType::X3;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX3);
-#elif FREEINK_DEVICE_X4 && !FREEINK_DEVICE_X3
+#elif FREEINK_DEVICE_X4 && !FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4CLASSIC
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX4);
+#elif FREEINK_DEVICE_X4CLASSIC && !FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4
+  // Same logical buttons as the C3 X4 (Up back, Down forward). The side keys
+  // are those two; the four bottom keys are Left, Right, Confirm, and Back.
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::XteinkX4Classic);
 #else
 #error "Build one device per firmware env (e.g. -DFREEINK_DEVICE_X3=1)."
 #endif
 
-  // Per-batch panel: X3 UC8253/UC8279, X4 SSD1677/UC8179. Probe before SPI
-  // owns the display pins. X3's facade keys off the sibling board profile.
+  // Per-batch panel. X3: UC8253/UC8279. X4 and X4 Classic: SSD1677/UC8179/UC8279.
+  // Probe before SPI owns the display pins. X3's facade keys off the sibling
+  // board profile. X4 Classic has no MISO; the probe reads VER half-duplex.
   freeink::applyXteinkDisplayController();
 #if FREEINK_DEVICE_X3
   if (BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279) {
@@ -58,13 +65,23 @@ void HalGPIO::begin() {
   }
 #endif
 
+#if FREEINK_DEVICE_X3 || FREEINK_DEVICE_X4
+  // C3 display bus. X4 Classic pins come from the board profile inside
+  // display.begin(); claiming these GPIOs would steal its buttons and reset.
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
+#endif
 
 #if FREEINK_DEVICE_X4
   pinMode(BAT_GPIO0, INPUT);
   pinMode(UART0_RXD, INPUT);
 #endif
   inputMgr.begin();
+}
+
+const char* HalGPIO::shortName() const {
+  if (deviceIsX3()) return "x3";
+  if (BoardConfig::isX4Classic()) return "x4c";
+  return "x4";
 }
 
 void HalGPIO::update() { inputMgr.update(); }
@@ -144,10 +161,14 @@ bool HalGPIO::isUsbConnected() const {
     }
     return false;
   }
-  if (BoardConfig::ACTIVE.usbDetect < 0) {
-    return false;
+  if (BoardConfig::ACTIVE.usbDetect >= 0) {
+    return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
   }
-  return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
+  // X4 Classic has no USB-detect GPIO. The CW2017 cannot see VBUS, so the
+  // charge STAT pin (GPIO21, active high) stands in. A full battery that has
+  // stopped charging reads as unplugged.
+  static const BatteryMonitor battery;
+  return battery.isCharging();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {

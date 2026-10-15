@@ -80,7 +80,7 @@ void setup() {
 
   const auto wakeupReason = gpio.getWakeupReason();
   LOG_INF("MAIN", "crossxtch " CROSSXTCH_VERSION " board=%s gpio=%s wake=%s bat=%u%% panic=%d",
-          BoardConfig::ACTIVE.name, gpio.deviceIsX3() ? "x3" : "x4", wakeupName(wakeupReason),
+          BoardConfig::ACTIVE.name, gpio.shortName(), wakeupName(wakeupReason),
           static_cast<unsigned>(powerManager.getBatteryPercentage()), HalSystem::isRebootFromPanic() ? 1 : 0);
 
   if (!Storage.begin()) {
@@ -111,13 +111,22 @@ void setup() {
           gpio.update();
           delay(10);
         }
-        if (gpio.isPressed(HalGPIO::BTN_UP)) {
+        // X4 Classic maps Up to GPIO0, an ESP32-S3 boot strap. Recovery is the
+        // other side key (Down, GPIO7) so a stuck strap cannot loop recovery.
+        const uint8_t recoveryButton = BoardConfig::isX4Classic() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
+        if (gpio.isPressed(recoveryButton)) {
           recoveryFirmware = true;
-          LOG_INF("MAIN", "Recovery firmware mode (UP + POWER)");
+          LOG_INF("MAIN", "Recovery firmware mode (%s + POWER)", BoardConfig::isX4Classic() ? "DOWN" : "UP");
         }
       }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
+      // Native USB on the S3 shares the cable with serial. Sleeping here loops
+      // a replug straight back into sleep. The C3 boards charge-sleep instead.
+      if (BoardConfig::isX4Classic()) {
+        LOG_INF("MAIN", "USB-power wake, staying up");
+        break;
+      }
       LOG_INF("MAIN", "USB-power wake, sleeping");
       powerManager.startDeepSleep(gpio);
       break;

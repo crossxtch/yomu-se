@@ -206,7 +206,7 @@ bool FileTransferServer::begin() {
   upload.writeBuffer = makeUniqueNoThrow<uint8_t[]>(UploadState::kWriteBufferSize);
   upload.writeBufferPos = 0;
 
-  mdnsHostname = gpio.deviceIsX3() ? "x3" : "x4";
+  mdnsHostname = gpio.shortName();
   mdnsStarted = MDNS.begin(mdnsHostname.c_str());
   if (mdnsStarted) {
     MDNS.addService("http", "tcp", 80);
