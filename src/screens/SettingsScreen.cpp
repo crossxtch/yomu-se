@@ -15,8 +15,8 @@
 #include "core/fontIds.h"
 #include "screens/LanguageScreen.h"
 
-#ifndef CROSSXTCH_VERSION
-#define CROSSXTCH_VERSION "dev"
+#ifndef YOMU_VERSION
+#define YOMU_VERSION "dev"
 #endif
 
 namespace {
@@ -220,7 +220,7 @@ void SettingsScreen::render() {
   if (notice) {
     drawNotice(gfx.height() - 40);
   } else {
-    gfx.drawCenteredText(FONT_UI, gfx.height() - 40, "crossxtch " CROSSXTCH_VERSION);
+    gfx.drawCenteredText(FONT_UI, gfx.height() - 40, "yomu " YOMU_VERSION);
   }
   presentUi();
 }

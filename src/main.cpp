@@ -22,8 +22,8 @@
 #include "core/fontIds.h"
 #include "network/WifiCredentialStore.h"
 
-#ifndef CROSSXTCH_VERSION
-#define CROSSXTCH_VERSION "dev"
+#ifndef YOMU_VERSION
+#define YOMU_VERSION "dev"
 #endif
 
 Gfx gfx(display);
@@ -47,6 +47,19 @@ static const char* wakeupName(HalGPIO::WakeupReason reason) {
       return "usb";
     default:
       return "other";
+  }
+}
+
+// A card from the previous directory name still opens.
+static void migrateDataDir() {
+  constexpr const char* kOld = "/.crossxtch";
+  if (Storage.exists(Settings::kDir) || !Storage.exists(kOld)) {
+    return;
+  }
+  if (Storage.rename(kOld, Settings::kDir)) {
+    LOG_INF("MAIN", "Renamed %s -> %s", kOld, Settings::kDir);
+  } else {
+    LOG_ERR("MAIN", "Could not rename %s -> %s", kOld, Settings::kDir);
   }
 }
 
@@ -79,7 +92,7 @@ void setup() {
   halClock.begin();
 
   const auto wakeupReason = gpio.getWakeupReason();
-  LOG_INF("MAIN", "crossxtch " CROSSXTCH_VERSION " board=%s gpio=%s wake=%s bat=%u%% panic=%d",
+  LOG_INF("MAIN", "yomu " YOMU_VERSION " board=%s gpio=%s wake=%s bat=%u%% panic=%d",
           BoardConfig::ACTIVE.name, gpio.shortName(), wakeupName(wakeupReason),
           static_cast<unsigned>(powerManager.getBatteryPercentage()), HalSystem::isRebootFromPanic() ? 1 : 0);
 
@@ -90,6 +103,7 @@ void setup() {
     return;
   }
   LOG_INF("MAIN", "SD ready");
+  migrateDataDir();
 
   HalSystem::checkPanic();
   settings.load();

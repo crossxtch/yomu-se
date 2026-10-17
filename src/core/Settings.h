@@ -6,8 +6,8 @@ struct Settings {
   static constexpr uint32_t MAGIC = 0x48585443;  // "HXTC"
   static constexpr uint16_t VERSION = 9;
   static constexpr uint16_t kMinVersion = 3;
-  static constexpr const char* kDir = "/.crossxtch";
-  static constexpr const char* kPath = "/.crossxtch/settings.bin";
+  static constexpr const char* kDir = "/.yomu";
+  static constexpr const char* kPath = "/.yomu/settings.bin";
   // trueSleepMinutes: 0 = none, else 5 / 10 / 15 minutes.
   static constexpr uint8_t kSleepNone = 0;
   static constexpr uint8_t kSleep5Min = 5;

@@ -10,8 +10,8 @@
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
 
-#ifndef CROSSXTCH_VERSION
-#define CROSSXTCH_VERSION "dev"
+#ifndef YOMU_VERSION
+#define YOMU_VERSION "dev"
 #endif
 
 #define MAX_PANIC_STACK_DEPTH 32
@@ -147,7 +147,7 @@ std::string getPanicInfo(bool full) {
   } else {
     std::string info;
 
-    info += "crossxtch version: " CROSSXTCH_VERSION;
+    info += "yomu version: " YOMU_VERSION;
     info += "\n\nPanic reason: " + std::string(panicMessage);
     info += "\n\nLast logs:\n" + getLastLogs();
     info += "\n\nStack memory:\n";
