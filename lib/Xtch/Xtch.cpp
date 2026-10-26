@@ -11,6 +11,10 @@
 
 #include "puff.h"
 
+static_assert(sizeof(xtch::Header) == 56, "XTC header is 56 bytes");
+static_assert(sizeof(xtch::PageTableEntry) == 16, "page table entry is 16 bytes");
+static_assert(sizeof(xtch::PageHeader) == 22, "XTG/XTH page header is 22 bytes");
+
 uint8_t* XtchBook::pageBuffer = nullptr;
 size_t XtchBook::pageBufferCapacity = 0;
 
@@ -19,7 +23,11 @@ bool isXtchPath(const char* path) {
     return false;
   }
   const size_t n = std::strlen(path);
-  return n >= 5 && strcasecmp(path + (n - 5), ".xtch") == 0;
+  if (n >= 5 && strcasecmp(path + (n - 5), ".xtch") == 0) {
+    return true;
+  }
+  // ".xtch" does not end in ".xtc": the last four characters are "xtch".
+  return n >= 4 && strcasecmp(path + (n - 4), ".xtc") == 0;
 }
 
 namespace {
@@ -131,6 +139,7 @@ void XtchBook::close() {
   opened = false;
   defaultWidth = 0;
   defaultHeight = 0;
+  bitDepth = 0;
   bookTitle[0] = '\0';
   bookAuthor[0] = '\0';
   memset(&header, 0, sizeof(header));
@@ -195,8 +204,9 @@ xtch::Error XtchBook::open(const char* path) {
   }
 
   opened = true;
-  LOG_INF("XTCH", "Opened %s (%u pages, %dx%d, title='%s') freeHeap=%u largestFreeBlock=%u", filepath,
-          header.pageCount, defaultWidth, defaultHeight, bookTitle, static_cast<unsigned>(ESP.getFreeHeap()),
+  LOG_INF("XTCH", "Opened %s (%u pages, %dx%d, %u-bit, title='%s') freeHeap=%u largestFreeBlock=%u", filepath,
+          header.pageCount, defaultWidth, defaultHeight, bitDepth, bookTitle,
+          static_cast<unsigned>(ESP.getFreeHeap()),
           static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
   return xtch::Error::Ok;
 }
@@ -210,8 +220,13 @@ xtch::Error XtchBook::readHeader() {
   }
   memcpy(&header, raw, sizeof(header));
 
-  if (header.magic != xtch::XTCH_MAGIC) {
-    LOG_ERR("XTCH", "Bad magic 0x%08lX (need XTCH)", static_cast<unsigned long>(header.magic));
+  uint8_t depth = 0;
+  if (header.magic == xtch::XTCH_MAGIC) {
+    depth = 2;
+  } else if (header.magic == xtch::XTC_MAGIC) {
+    depth = 1;
+  } else {
+    LOG_ERR("XTCH", "Bad magic 0x%08lX (need XTC or XTCH)", static_cast<unsigned long>(header.magic));
     return xtch::Error::InvalidMagic;
   }
 
@@ -225,7 +240,16 @@ xtch::Error XtchBook::readHeader() {
     LOG_ERR("XTCH", "Header pageCount is 0");
     return xtch::Error::CorruptedHeader;
   }
+  bitDepth = depth;
   return xtch::Error::Ok;
+}
+
+size_t XtchBook::decodedBitmapBytes(const uint16_t width, const uint16_t height) const {
+  if (bitDepth == 1) {
+    return ((static_cast<size_t>(width) + 7) / 8) * static_cast<size_t>(height);
+  }
+  const size_t colBytes = (static_cast<size_t>(height) + 7) / 8;
+  return colBytes * static_cast<size_t>(width) * 2;
 }
 
 xtch::Error XtchBook::readMetadata() {
@@ -413,9 +437,7 @@ xtch::Error XtchBook::loadPageData(const uint32_t pageIndex) {
     return xtch::Error::FileNotFound;
   }
 
-  const size_t colBytes = (static_cast<size_t>(page.height) + 7) / 8;
-  const size_t planeSize = colBytes * static_cast<size_t>(page.width);
-  const size_t bitmapSize = planeSize * 2;
+  const size_t bitmapSize = decodedBitmapBytes(page.width, page.height);
   // Decoded size is always derived from width/height (never from what's on disk),
   // so pageBuffer's layout/size is unaffected by whether the page is compressed.
   const size_t totalDecoded = sizeof(xtch::PageHeader) + bitmapSize;
@@ -466,8 +488,10 @@ xtch::Error XtchBook::loadPageData(const uint32_t pageIndex) {
     LOG_ERR("XTCH", "Short page header read for page %lu", static_cast<unsigned long>(pageIndex));
     return xtch::Error::ReadError;
   }
-  if (pageHeader.magic != xtch::XTH_MAGIC) {
-    LOG_ERR("XTCH", "Bad page magic 0x%08lX (need XTH)", static_cast<unsigned long>(pageHeader.magic));
+  const uint32_t pageMagic = bitDepth == 1 ? xtch::XTG_MAGIC : xtch::XTH_MAGIC;
+  if (pageHeader.magic != pageMagic) {
+    LOG_ERR("XTCH", "Bad page magic 0x%08lX (need %s)", static_cast<unsigned long>(pageHeader.magic),
+            bitDepth == 1 ? "XTG" : "XTH");
     return xtch::Error::InvalidMagic;
   }
   if (pageHeader.width != page.width || pageHeader.height != page.height) {
@@ -669,7 +693,110 @@ void blitFullFrame(uint8_t* fb, const uint8_t* plane1, const uint8_t* plane2, co
     }
   }
 }
+
+// XTG is portrait row-major: 8 pixels per byte, MSB leftmost, 0 = black, 1 = white.
+// The framebuffer is the landscape panel, 90° clockwise from that portrait, with
+// the same polarity (phyX = y, phyY = panelHeight-1-x, MSB is the leftmost panel
+// pixel). A full-frame page whose sides are multiples of 8 turns each 8 source
+// rows into one framebuffer byte-column: source pixel (x, y0+b) is bit (7-b)
+// of the byte at panel row (width-1-x).
+void blitXtgFullFrame(uint8_t* fb, const uint8_t* src, const uint16_t pageWidth, const uint16_t pageHeight,
+                      const uint16_t stride) {
+  const size_t rowBytes = static_cast<size_t>(pageWidth) / 8;
+  const int yGroups = pageHeight / 8;
+  for (int col = 0; col < yGroups; ++col) {
+    const uint8_t* rowPtr[8];
+    for (int b = 0; b < 8; ++b) {
+      rowPtr[b] = src + static_cast<size_t>(col * 8 + b) * rowBytes;
+    }
+    for (size_t xb = 0; xb < rowBytes; ++xb) {
+      uint8_t in[8];
+      for (int b = 0; b < 8; ++b) {
+        in[b] = rowPtr[b][xb];
+      }
+      const int x0 = static_cast<int>(xb * 8);
+      for (int k = 0; k < 8; ++k) {
+        uint8_t packed = 0;
+        const int shift = 7 - k;
+        for (int b = 0; b < 8; ++b) {
+          packed |= static_cast<uint8_t>(((in[b] >> shift) & 1) << (7 - b));
+        }
+        const int phyY = static_cast<int>(pageWidth) - 1 - (x0 + k);
+        fb[static_cast<size_t>(phyY) * stride + static_cast<size_t>(col)] = packed;
+      }
+    }
+  }
+}
+
+// Caller has filled the framebuffer with white. Clears the black XTG pixels.
+// Page must already fit on the panel; ox/oy are the centering offsets.
+void blitXtgMasked(uint8_t* fb, const uint16_t stride, const int panelHeight, const uint8_t* src,
+                   const uint16_t pageWidth, const uint16_t pageHeight, const int ox, const int oy) {
+  const size_t rowBytes = (static_cast<size_t>(pageWidth) + 7) / 8;
+  for (uint16_t y = 0; y < pageHeight; ++y) {
+    const uint8_t* row = src + static_cast<size_t>(y) * rowBytes;
+    const int phyX = oy + static_cast<int>(y);
+    const size_t byteCol = static_cast<size_t>(phyX >> 3);
+    const uint8_t clearMask = static_cast<uint8_t>(~(1u << (7 - (phyX & 7))));
+    for (uint16_t x = 0; x < pageWidth; ++x) {
+      if ((row[x >> 3] >> (7 - (x & 7))) & 1) {
+        continue;
+      }
+      const int phyY = panelHeight - 1 - (ox + static_cast<int>(x));
+      fb[static_cast<size_t>(phyY) * stride + byteCol] &= clearMask;
+    }
+  }
+}
 }  // namespace
+
+bool XtchBook::drawMonoPage(Gfx& gfx, const uint32_t pageIndex, const uint16_t pageWidth, const uint16_t pageHeight,
+                            const bool prefetched, const uint32_t tPage, int& pagesUntilFullRefresh,
+                            const int refreshFrequency) {
+  const uint8_t* src = pageBuffer + sizeof(xtch::PageHeader);
+  const int ox = (gfx.width() - static_cast<int>(pageWidth)) / 2;
+  const int oy = (gfx.height() - static_cast<int>(pageHeight)) / 2;
+  uint8_t* fb = gfx.frameBuffer();
+  const bool fullFrame = fb != nullptr && ox == 0 && oy == 0 && static_cast<int>(pageWidth) == gfx.width() &&
+                         static_cast<int>(pageHeight) == gfx.height() && (pageWidth % 8) == 0 &&
+                         (pageHeight % 8) == 0 && gfx.stride() == static_cast<uint16_t>(pageHeight / 8);
+
+  const uint32_t tBlit = millis();
+  if (fullFrame) {
+    blitXtgFullFrame(fb, src, pageWidth, pageHeight, gfx.stride());
+  } else {
+    gfx.clear(false);
+    if (fb != nullptr) {
+      blitXtgMasked(fb, gfx.stride(), gfx.fbHeight(), src, pageWidth, pageHeight, ox, oy);
+    } else {
+      const size_t rowBytes = (static_cast<size_t>(pageWidth) + 7) / 8;
+      for (uint16_t y = 0; y < pageHeight; ++y) {
+        const uint8_t* row = src + static_cast<size_t>(y) * rowBytes;
+        for (uint16_t x = 0; x < pageWidth; ++x) {
+          if (((row[x >> 3] >> (7 - (x & 7))) & 1) == 0) {
+            gfx.drawPixel(ox + static_cast<int>(x), oy + static_cast<int>(y), true);
+          }
+        }
+      }
+    }
+  }
+  const unsigned long blitMs = static_cast<unsigned long>(millis() - tBlit);
+
+  const char* mode = "fast";
+  if (pagesUntilFullRefresh <= 1) {
+    mode = "half";
+    gfx.present(HalDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = refreshFrequency;
+  } else {
+    gfx.present(HalDisplay::FAST_REFRESH);
+    --pagesUntilFullRefresh;
+  }
+
+  error = xtch::Error::Ok;
+  LOG_INF("PERF", "page %lu/%u bw %s hit=%d full=%d mhz=%u blit=%lums total=%lums",
+          static_cast<unsigned long>(pageIndex + 1), header.pageCount, mode, prefetched ? 1 : 0, fullFrame ? 1 : 0,
+          static_cast<unsigned>(getCpuFrequencyMhz()), blitMs, static_cast<unsigned long>(millis() - tPage));
+  return true;
+}
 
 bool XtchBook::drawPage(Gfx& gfx, const uint32_t pageIndex, int& pagesUntilFullRefresh, const int refreshFrequency) {
   if (!opened) {
@@ -708,8 +835,6 @@ bool XtchBook::drawPage(Gfx& gfx, const uint32_t pageIndex, int& pagesUntilFullR
 
   const uint16_t pageWidth = page.width;
   const uint16_t pageHeight = page.height;
-  const size_t colBytes = (static_cast<size_t>(pageHeight) + 7) / 8;
-  const size_t planeSize = colBytes * static_cast<size_t>(pageWidth);
   const bool prefetched = loadedPageIndex == pageIndex && pageBuffer != nullptr;
 
   const uint32_t tPage = millis();
@@ -730,6 +855,13 @@ bool XtchBook::drawPage(Gfx& gfx, const uint32_t pageIndex, int& pagesUntilFullR
     }
   }
 
+  if (bitDepth == 1) {
+    return drawMonoPage(gfx, pageIndex, pageWidth, pageHeight, prefetched, tPage, pagesUntilFullRefresh,
+                        refreshFrequency);
+  }
+
+  const size_t colBytes = (static_cast<size_t>(pageHeight) + 7) / 8;
+  const size_t planeSize = colBytes * static_cast<size_t>(pageWidth);
   const uint8_t* plane1 = pageBuffer + sizeof(xtch::PageHeader);
   const uint8_t* plane2 = plane1 + planeSize;
   const int ox = (gfx.width() - static_cast<int>(pageWidth)) / 2;

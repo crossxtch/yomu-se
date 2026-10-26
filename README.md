@@ -1,6 +1,6 @@
 # yomu
 
-XTCH reader for the Xteink X3, X4, and X4 Classic. This checkout is `yomu-se`. On the device the name is yomu. Books are `.xtch` files on the SD card: pre-rendered 2-bit page bitmaps. This firmware blits them. It does not lay out text, scale pages, or read `.xtc`.
+XTCH reader for the Xteink X3, X4, and X4 Classic. This checkout is `yomu-se`. On the device the name is yomu. Books are `.xtc` and `.xtch` files on the SD card: pre-rendered page bitmaps. `.xtc` is 1-bit black and white. `.xtch` is 2-bit grayscale. This firmware blits them. It does not lay out text or scale pages.
 
 One firmware binary per device. Pages are rendered for that panel:
 
@@ -19,7 +19,7 @@ src/screens/          home, browser, reader, chapters, settings, update
 src/platform/         chip workarounds
 lib/hal               hardware wrappers
 lib/Gfx               portrait framebuffer + UI text
-lib/Xtch              XTCH container + page blit
+lib/Xtch              XTC/XTCH container + page blit
 lib/EpdFont           Ubuntu UI fonts
 reference/            CrossPoint submodule (lookup only)
 freeink-sdk/          display and board support

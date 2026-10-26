@@ -75,7 +75,7 @@ void BrowserScreen::load() {
       row += '/';
       entries.push_back(std::move(row));
     } else if (mode == Mode::Firmware ? hasExt(name, ".bin")
-                                     : hasExt(name, ".xtch")) {
+                                     : (hasExt(name, ".xtch") || hasExt(name, ".xtc"))) {
       entries.emplace_back(name);
     }
   }

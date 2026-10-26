@@ -8,11 +8,11 @@
 
 class Gfx;
 
-// Path ends in ".xtch", case-insensitive.
+// Path ends in ".xtc" or ".xtch", case-insensitive.
 bool isXtchPath(const char* path);
 
-// Streaming XTCH reader. The source file stays open while the book is open so
-// page turns do not re-walk FAT; close() releases it.
+// Streaming XTC/XTCH reader. The source file stays open while the book is open
+// so page turns do not re-walk FAT; close() releases it.
 class XtchBook {
  public:
   XtchBook() = default;
@@ -47,7 +47,8 @@ class XtchBook {
   bool chapterReadFailed() const { return chaptersBroken; }
   const std::vector<xtch::ChapterInfo>& getChapters();
 
-  // Paints a 2-bit page and runs the display sequence; caller must not present() on success.
+  // Paints the page and runs the display sequence; caller must not present() on success.
+  // 1-bit XTC is one black-and-white refresh. 2-bit XTCH is the grayscale sequence.
   // pagesUntilFullRefresh is decremented each call and reset to refreshFrequency at the periodic full refresh.
   bool drawPage(Gfx& gfx, uint32_t pageIndex, int& pagesUntilFullRefresh, int refreshFrequency);
 
@@ -70,6 +71,7 @@ class XtchBook {
   xtch::Header header{};
   uint16_t defaultWidth = 0;
   uint16_t defaultHeight = 0;
+  uint8_t bitDepth = 0;  // 1 = XTC/XTG, 2 = XTCH/XTH
   bool opened = false;
   xtch::Error error = xtch::Error::Ok;
   std::vector<xtch::ChapterInfo> chapters;
@@ -114,5 +116,9 @@ class XtchBook {
   uint32_t clusterLruLookup(uint32_t pageIndex);
   void clusterLruRemember(uint32_t pageIndex, uint32_t cluster);
   xtch::Error loadPageData(uint32_t pageIndex);
+  // Uncompressed page body size. 1-bit is one row-major plane; 2-bit is two column planes.
+  size_t decodedBitmapBytes(uint16_t width, uint16_t height) const;
+  bool drawMonoPage(Gfx& gfx, uint32_t pageIndex, uint16_t pageWidth, uint16_t pageHeight, bool prefetched,
+                    uint32_t tPage, int& pagesUntilFullRefresh, int refreshFrequency);
   void readChapters();
 };

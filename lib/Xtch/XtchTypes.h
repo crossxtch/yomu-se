@@ -3,13 +3,18 @@
 #include <cstdint>
 #include <string>
 
-// XTCH on-disk layout (from CrossPoint lib/Xtc, MIT).
-// Pages are pre-rendered 2-bit bitmaps. Width and height come from the page table.
+// XTC/XTCH on-disk layout (from CrossPoint lib/Xtc, MIT).
+// .xtc is a 1-bit container: each page is an XTG bitmap (row-major, 8 pixels
+// per byte, MSB leftmost, 0 = black, 1 = white). .xtch is a 2-bit container:
+// each page is an XTH bitmap (two column-major bit planes). Width and height
+// come from the page table.
 
 namespace xtch {
 
-constexpr uint32_t XTCH_MAGIC = 0x48435458;  // "XTCH"
-constexpr uint32_t XTH_MAGIC = 0x00485458;   // "XTH\0"
+constexpr uint32_t XTC_MAGIC = 0x00435458;   // "XTC\0" 1-bit container
+constexpr uint32_t XTCH_MAGIC = 0x48435458;  // "XTCH" 2-bit container
+constexpr uint32_t XTG_MAGIC = 0x00475458;   // "XTG\0" 1-bit page
+constexpr uint32_t XTH_MAGIC = 0x00485458;   // "XTH\0" 2-bit page
 
 #pragma pack(push, 1)
 struct Header {
