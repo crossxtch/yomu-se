@@ -101,10 +101,15 @@ class Ssd1677Driver : public PanelDriver {
   void seedPreviousFrame(EpdBus& bus, const uint8_t* buf) override;
 
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const override {
+#if FREEINK_BW_ONLY
+    (void)mode;
+    return {};
+#else
     if (mode == GrayscaleMode::Absolute && _cfg.absoluteGrayscale)
       return {GrayscaleEncoding::AbsolutePlanes, GrayscaleBase::Combined, true, false, false};
     if (mode != GrayscaleMode::Overlay || !_cfg.overlayGrayscale) return {};
     return {GrayscaleEncoding::OverlayMasks, GrayscaleBase::Separate, true, true, false};
+#endif
   }
   void copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) override;
   void copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) override;

@@ -8,10 +8,10 @@
 
 class Gfx;
 
-// Path ends in ".xtc" or ".xtch", case-insensitive.
+// Path ends in ".xtc", case-insensitive.
 bool isXtchPath(const char* path);
 
-// Streaming XTC/XTCH reader. The source file stays open while the book is open
+// Streaming XTC reader. The source file stays open while the book is open
 // so page turns do not re-walk FAT; close() releases it.
 class XtchBook {
  public:
@@ -47,21 +47,13 @@ class XtchBook {
   bool chapterReadFailed() const { return chaptersBroken; }
   const std::vector<xtch::ChapterInfo>& getChapters();
 
-  // Paints the page and runs the display sequence; caller must not present() on success.
-  // 1-bit XTC is one black-and-white refresh. 2-bit XTCH is the grayscale sequence.
+  // Paints the page with one black-and-white refresh. Caller must not present() on success.
   // pagesUntilFullRefresh is decremented each call and reset to refreshFrequency at the periodic full refresh.
   bool drawPage(Gfx& gfx, uint32_t pageIndex, int& pagesUntilFullRefresh, int refreshFrequency);
 
   // Best-effort load of fromPageIndex+1 into pageBuffer. No-op if already loaded
   // or past the end. Call after drawPage when the next turn is likely +1.
   void prefetchForward(uint32_t fromPageIndex);
-
-  // Runs the deferred post-gray-refresh RAM cleanup if drawPage() left one
-  // pending. No-op otherwise. Call opportunistically on idle ticks so the
-  // SPI housekeeping happens before the user's next page turn instead of
-  // blocking the page that just rendered.
-  bool pendingCleanup() const { return cleanupPending; }
-  void flushPendingCleanup(Gfx& gfx);
 
  private:
   char filepath[256]{};
@@ -71,7 +63,6 @@ class XtchBook {
   xtch::Header header{};
   uint16_t defaultWidth = 0;
   uint16_t defaultHeight = 0;
-  uint8_t bitDepth = 0;  // 1 = XTC/XTG, 2 = XTCH/XTH
   bool opened = false;
   xtch::Error error = xtch::Error::Ok;
   std::vector<xtch::ChapterInfo> chapters;
@@ -79,7 +70,7 @@ class XtchBook {
   bool chaptersLoaded = false;
   bool chaptersBroken = false;
   // Shared decoded-page scratch, sized for the panel. Kept across book close()
-  // so the next open does not have to find a ~100 KB hole in a fragmented heap.
+  // so the next open does not have to find a ~50 KB hole in a fragmented heap.
   static uint8_t* pageBuffer;
   static size_t pageBufferCapacity;
   uint32_t loadedPageIndex = 0xFFFFFFFFu;
@@ -102,8 +93,6 @@ class XtchBook {
   ClusterLruSlot clusterLru[kClusterLruSize]{};
   uint8_t clusterLruCount = 0;
 
-  bool cleanupPending = false;
-
   bool ensureOpen();
   void closeFile();
   xtch::Error readHeader();
@@ -116,7 +105,7 @@ class XtchBook {
   uint32_t clusterLruLookup(uint32_t pageIndex);
   void clusterLruRemember(uint32_t pageIndex, uint32_t cluster);
   xtch::Error loadPageData(uint32_t pageIndex);
-  // Uncompressed page body size. 1-bit is one row-major plane; 2-bit is two column planes.
+  // Uncompressed XTG body size: one row-major plane.
   size_t decodedBitmapBytes(uint16_t width, uint16_t height) const;
   bool drawMonoPage(Gfx& gfx, uint32_t pageIndex, uint16_t pageWidth, uint16_t pageHeight, bool prefetched,
                     uint32_t tPage, int& pagesUntilFullRefresh, int refreshFrequency);

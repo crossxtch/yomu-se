@@ -171,6 +171,9 @@ void Uc8179Driver::initController(EpdBus& bus) {
 }
 
 void Uc8179Driver::configureDirectGrayscale(EpdBus &bus) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (_directGrayConfigured)
     return;
   if (_isScreenOn) {
@@ -198,6 +201,8 @@ void Uc8179Driver::configureDirectGrayscale(EpdBus &bus) {
   bus.data(config[5]);
   bus.cmdData2(CMD_VCOM_DATA_INTERVAL, _cfg.cdiActive, CDI_INTERVAL);
   _directGrayConfigured = true;
+
+#endif
 }
 
 void Uc8179Driver::restoreBwConfiguration(EpdBus &bus) {
@@ -224,7 +229,7 @@ void Uc8179Driver::begin(EpdBus& bus) {
   _needFullClear = true;
   _oldPlaneValid = false;
   _redriveAfterGray = false;
-#if defined(BOARD_HAS_PSRAM)
+#if !FREEINK_BW_ONLY && defined(BOARD_HAS_PSRAM)
   if (_grayBase == nullptr) {
     _grayBase = static_cast<uint8_t*>(heap_caps_malloc(_bufferSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   }
@@ -247,6 +252,9 @@ void Uc8179Driver::display(EpdBus& bus, const uint8_t* fb, const uint8_t* prev, 
 }
 
 void Uc8179Driver::transitionGrayscaleBase(EpdBus& bus, const uint8_t* fb, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!fb) return;
   _grayBaseValid = false;
   _absoluteGrayPlanes = false;
@@ -276,9 +284,14 @@ void Uc8179Driver::transitionGrayscaleBase(EpdBus& bus, const uint8_t* fb, bool 
     bus.waitBusy(" 8179_gray_base_POF");
     _isScreenOn = false;
   }
+
+#endif
 }
 
 void Uc8179Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!fb) return;
 
   // Factory.bin's first gray_aa call paints its B/W base normally. Later calls
@@ -295,6 +308,8 @@ void Uc8179Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshM
   }
 
   transitionGrayscaleBase(bus, fb, turnOff);
+
+#endif
 }
 
 // Stream a framebuffer into RAM plane `ramCmd`, mirrored vertically via row
@@ -507,6 +522,9 @@ void Uc8179Driver::deepSleep(EpdBus& bus) {
 // masks are converted below to Factory.bin's absolute plane0/plane1 encoding;
 // the resulting (DTM1,DTM2) pair selects the WW/BW/WB/BB LUT per pixel.
 void Uc8179Driver::runGrayscalePrecondition(EpdBus& bus) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // Factory.bin skips XTF_PRE_BW_MID for its first AA page. Callers must have
   // retained the previous B/W base in DTM1 and loaded the new base into DTM2.
   if (!_oldPlaneValid || !_grayRefreshedOnce) return;
@@ -555,9 +573,14 @@ void Uc8179Driver::runGrayscalePrecondition(EpdBus& bus) {
   bus.cmd(CMD_VCOM_DATA_INTERVAL);
   bus.data(_cfg.cdiIdle);
   bus.data(CDI_INTERVAL);
+
+#endif
 }
 
 void Uc8179Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // Intentionally no extra pass. The correct stock transition has to run while
   // DTM1 still contains the previous page and is therefore performed by
   // displayGrayscaleBase(). After a normal B/W activation both planes are the
@@ -567,9 +590,14 @@ void Uc8179Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, ui
   (void)y;
   (void)w;
   (void)h;
+
+#endif
 }
 
 void Uc8179Driver::beginGrayscale(EpdBus& bus, const uint8_t* fb, GrayscaleMode mode, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (mode == GrayscaleMode::Direct) {
     configureDirectGrayscale(bus);
     _absoluteInput = true;
@@ -595,9 +623,14 @@ void Uc8179Driver::beginGrayscale(EpdBus& bus, const uint8_t* fb, GrayscaleMode 
   _directGrayPlanes = 0;
   displayGrayscaleBase(bus, fb, fallback, turnOff);
   _absoluteInput = mode == GrayscaleMode::Absolute;
+
+#endif
 }
 
 void Uc8179Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!lsb) return;
   if (_absoluteInput) {
     bus.waitBusy(" absolute plane");
@@ -628,9 +661,14 @@ void Uc8179Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
   }
   _grayBaseValid = false;  // _grayBase now holds absolute plane0, not the B/W base
   _bwPlanesSynced = false;
+
+#endif
 }
 
 void Uc8179Driver::copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!msb) return;
   if (_absoluteInput) {
     bus.waitBusy(" absolute plane");
@@ -655,10 +693,15 @@ void Uc8179Driver::copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) {
   } else {
     streamPlane(bus, CMD_DTM2, msb);  // compatibility fallback
   }
+
+#endif
 }
 
 void Uc8179Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut,
                                bool factoryMode) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // fb = the reader's current frame; used to re-seed the B/W baseline below.
   (void)lut;          // waveform comes from the built-in gray LUT set (kGrayLuts)
 
@@ -762,9 +805,14 @@ void Uc8179Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, con
     bus.waitBusy(" 8179_absolute_POF");
     _isScreenOn = false;
   }
+
+#endif
 }
 
 void Uc8179Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   bus.waitBusy(" 8179_gray_cleanup");
   _absoluteInput = false;
   _directGrayPass = false;
@@ -791,6 +839,8 @@ void Uc8179Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
   _oldPlaneValid = true;
   _bwPlanesSynced = true;
   // RAM restoration does not cancel a requested physical clean.
+
+#endif
 }
 
 // Per-board config injection, same idiom as the other drivers: define

@@ -41,19 +41,6 @@ class Gfx {
 
   uint8_t* frameBuffer() const { return fb; }
 
-  // 2-bit grayscale helpers used by XtchBook::drawPage. Framebuffer is scratch between passes.
-  void displayGrayscaleBase(HalDisplay::RefreshMode fallback = HalDisplay::HALF_REFRESH);
-  void startGrayscaleBase(HalDisplay::RefreshMode fallback = HalDisplay::HALF_REFRESH);
-  void finishGrayscaleBase();
-  void preconditionGrayscale();
-  void copyGrayscaleLsbBuffers();
-  void copyGrayscaleMsbBuffers();
-  void displayGrayBuffer();
-  void startGrayBuffer();
-  void finishGrayBuffer();
-  void cleanupGrayscaleBuffers();
-  bool combinesGrayscaleBase() const;
-
  private:
   static constexpr int kMaxFonts = 4;
 

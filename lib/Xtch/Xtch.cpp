@@ -13,7 +13,7 @@
 
 static_assert(sizeof(xtch::Header) == 56, "XTC header is 56 bytes");
 static_assert(sizeof(xtch::PageTableEntry) == 16, "page table entry is 16 bytes");
-static_assert(sizeof(xtch::PageHeader) == 22, "XTG/XTH page header is 22 bytes");
+static_assert(sizeof(xtch::PageHeader) == 22, "XTG page header is 22 bytes");
 
 uint8_t* XtchBook::pageBuffer = nullptr;
 size_t XtchBook::pageBufferCapacity = 0;
@@ -23,10 +23,6 @@ bool isXtchPath(const char* path) {
     return false;
   }
   const size_t n = std::strlen(path);
-  if (n >= 5 && strcasecmp(path + (n - 5), ".xtch") == 0) {
-    return true;
-  }
-  // ".xtch" does not end in ".xtc": the last four characters are "xtch".
   return n >= 4 && strcasecmp(path + (n - 4), ".xtc") == 0;
 }
 
@@ -96,8 +92,11 @@ bool growBuffer(uint8_t*& buf, size_t& cap, const size_t needed) {
 }  // namespace
 
 bool XtchBook::reserveScratchBuffers(const uint16_t maxWidth, const uint16_t maxHeight) {
-  const size_t colBytes = (static_cast<size_t>(maxHeight) + 7) / 8;
-  const size_t bitmapSize = colBytes * static_cast<size_t>(maxWidth) * 2;
+  // Panel size is landscape; pages are the swapped portrait. Take the larger
+  // 1-bit plane so a full-frame page fits either way.
+  const size_t asPassed = ((static_cast<size_t>(maxWidth) + 7) / 8) * maxHeight;
+  const size_t swapped = ((static_cast<size_t>(maxHeight) + 7) / 8) * maxWidth;
+  const size_t bitmapSize = asPassed > swapped ? asPassed : swapped;
   const size_t totalDecoded = sizeof(xtch::PageHeader) + bitmapSize;
   if (growBuffer(pageBuffer, pageBufferCapacity, totalDecoded)) {
     logHeap("Reserved page buffer");
@@ -125,7 +124,6 @@ void XtchBook::closeFile() {
 }
 
 void XtchBook::close() {
-  cleanupPending = false;
   closeFile();
   // pageBuffer is intentionally NOT freed here: it's a static scratch buffer
   // sized for the panel's worst-case page, kept alive for the app's lifetime
@@ -139,7 +137,6 @@ void XtchBook::close() {
   opened = false;
   defaultWidth = 0;
   defaultHeight = 0;
-  bitDepth = 0;
   bookTitle[0] = '\0';
   bookAuthor[0] = '\0';
   memset(&header, 0, sizeof(header));
@@ -204,8 +201,8 @@ xtch::Error XtchBook::open(const char* path) {
   }
 
   opened = true;
-  LOG_INF("XTCH", "Opened %s (%u pages, %dx%d, %u-bit, title='%s') freeHeap=%u largestFreeBlock=%u", filepath,
-          header.pageCount, defaultWidth, defaultHeight, bitDepth, bookTitle,
+  LOG_INF("XTCH", "Opened %s (%u pages, %dx%d, title='%s') freeHeap=%u largestFreeBlock=%u", filepath,
+          header.pageCount, defaultWidth, defaultHeight, bookTitle,
           static_cast<unsigned>(ESP.getFreeHeap()),
           static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
   return xtch::Error::Ok;
@@ -220,13 +217,8 @@ xtch::Error XtchBook::readHeader() {
   }
   memcpy(&header, raw, sizeof(header));
 
-  uint8_t depth = 0;
-  if (header.magic == xtch::XTCH_MAGIC) {
-    depth = 2;
-  } else if (header.magic == xtch::XTC_MAGIC) {
-    depth = 1;
-  } else {
-    LOG_ERR("XTCH", "Bad magic 0x%08lX (need XTC or XTCH)", static_cast<unsigned long>(header.magic));
+  if (header.magic != xtch::XTC_MAGIC) {
+    LOG_ERR("XTCH", "Bad magic 0x%08lX (need XTC)", static_cast<unsigned long>(header.magic));
     return xtch::Error::InvalidMagic;
   }
 
@@ -240,16 +232,11 @@ xtch::Error XtchBook::readHeader() {
     LOG_ERR("XTCH", "Header pageCount is 0");
     return xtch::Error::CorruptedHeader;
   }
-  bitDepth = depth;
   return xtch::Error::Ok;
 }
 
 size_t XtchBook::decodedBitmapBytes(const uint16_t width, const uint16_t height) const {
-  if (bitDepth == 1) {
-    return ((static_cast<size_t>(width) + 7) / 8) * static_cast<size_t>(height);
-  }
-  const size_t colBytes = (static_cast<size_t>(height) + 7) / 8;
-  return colBytes * static_cast<size_t>(width) * 2;
+  return ((static_cast<size_t>(width) + 7) / 8) * static_cast<size_t>(height);
 }
 
 xtch::Error XtchBook::readMetadata() {
@@ -488,10 +475,8 @@ xtch::Error XtchBook::loadPageData(const uint32_t pageIndex) {
     LOG_ERR("XTCH", "Short page header read for page %lu", static_cast<unsigned long>(pageIndex));
     return xtch::Error::ReadError;
   }
-  const uint32_t pageMagic = bitDepth == 1 ? xtch::XTG_MAGIC : xtch::XTH_MAGIC;
-  if (pageHeader.magic != pageMagic) {
-    LOG_ERR("XTCH", "Bad page magic 0x%08lX (need %s)", static_cast<unsigned long>(pageHeader.magic),
-            bitDepth == 1 ? "XTG" : "XTH");
+  if (pageHeader.magic != xtch::XTG_MAGIC) {
+    LOG_ERR("XTCH", "Bad page magic 0x%08lX (need XTG)", static_cast<unsigned long>(pageHeader.magic));
     return xtch::Error::InvalidMagic;
   }
   if (pageHeader.width != page.width || pageHeader.height != page.height) {
@@ -663,37 +648,6 @@ const std::vector<xtch::ChapterInfo>& XtchBook::getChapters() {
 }
 
 namespace {
-enum class PlaneOp : uint8_t { Ink, Lsb, Msb };
-
-// Full-frame pages match logical size (X3 528×792, X4 480×800). XTCH columns
-// are stored in the same order as panel rows after the 90° map, so each source
-// byte is already one framebuffer byte.
-void blitFullFrame(uint8_t* fb, const uint8_t* plane1, const uint8_t* plane2, const size_t colBytes,
-                   const uint16_t rows, const PlaneOp op) {
-  for (uint16_t row = 0; row < rows; ++row) {
-    const uint8_t* p1 = plane1 + static_cast<size_t>(row) * colBytes;
-    const uint8_t* p2 = plane2 + static_cast<size_t>(row) * colBytes;
-    uint8_t* dst = fb + static_cast<size_t>(row) * colBytes;
-    switch (op) {
-      case PlaneOp::Ink:
-        for (size_t k = 0; k < colBytes; ++k) {
-          dst[k] = static_cast<uint8_t>(~(p1[k] | p2[k]));
-        }
-        break;
-      case PlaneOp::Lsb:
-        for (size_t k = 0; k < colBytes; ++k) {
-          dst[k] = static_cast<uint8_t>(static_cast<uint8_t>(~p1[k]) & p2[k]);
-        }
-        break;
-      case PlaneOp::Msb:
-        for (size_t k = 0; k < colBytes; ++k) {
-          dst[k] = static_cast<uint8_t>(p1[k] ^ p2[k]);
-        }
-        break;
-    }
-  }
-}
-
 // XTG is portrait row-major: 8 pixels per byte, MSB leftmost, 0 = black, 1 = white.
 // The framebuffer is the landscape panel, 90° clockwise from that portrait, with
 // the same polarity (phyX = y, phyY = panelHeight-1-x, MSB is the leftmost panel
@@ -812,11 +766,6 @@ bool XtchBook::drawPage(Gfx& gfx, const uint32_t pageIndex, int& pagesUntilFullR
     return false;
   };
 
-  // A prior page's cleanup may still be pending. The new page and an error
-  // screen both present, and both need the DTM banks already resynced. Its
-  // PERF cleanup line is not part of this page's total.
-  flushPendingCleanup(gfx);
-
   xtch::PageInfo page{};
   const xtch::Error tableErr = readPageTableEntry(pageIndex, page);
   if (tableErr != xtch::Error::Ok) {
@@ -855,110 +804,8 @@ bool XtchBook::drawPage(Gfx& gfx, const uint32_t pageIndex, int& pagesUntilFullR
     }
   }
 
-  if (bitDepth == 1) {
-    return drawMonoPage(gfx, pageIndex, pageWidth, pageHeight, prefetched, tPage, pagesUntilFullRefresh,
-                        refreshFrequency);
-  }
-
-  const size_t colBytes = (static_cast<size_t>(pageHeight) + 7) / 8;
-  const size_t planeSize = colBytes * static_cast<size_t>(pageWidth);
-  const uint8_t* plane1 = pageBuffer + sizeof(xtch::PageHeader);
-  const uint8_t* plane2 = plane1 + planeSize;
-  const int ox = (gfx.width() - static_cast<int>(pageWidth)) / 2;
-  const int oy = (gfx.height() - static_cast<int>(pageHeight)) / 2;
-  uint8_t* fb = gfx.frameBuffer();
-  const bool fullFrame = fb != nullptr && ox == 0 && oy == 0 && static_cast<int>(pageWidth) == gfx.width() &&
-                         static_cast<int>(pageHeight) == gfx.height() && (pageHeight % 8) == 0 &&
-                         gfx.stride() == static_cast<uint16_t>(colBytes);
-
-  auto paint = [&](const PlaneOp op) {
-    if (fullFrame) {
-      blitFullFrame(fb, plane1, plane2, colBytes, pageWidth, op);
-      return;
-    }
-    const bool ink = op == PlaneOp::Ink;
-    gfx.clear(!ink);
-    for (uint16_t y = 0; y < pageHeight; ++y) {
-      const size_t byteInCol = y / 8;
-      const uint8_t bitInByte = static_cast<uint8_t>(7 - (y % 8));
-      size_t byteOffset = static_cast<size_t>(pageWidth - 1) * colBytes + byteInCol;
-      for (uint16_t x = 0; x < pageWidth; ++x, byteOffset -= colBytes) {
-        const uint8_t pv = static_cast<uint8_t>(((plane1[byteOffset] >> bitInByte) & 1) << 1 |
-                                               ((plane2[byteOffset] >> bitInByte) & 1));
-        const bool keep = op == PlaneOp::Ink ? pv >= 1 : op == PlaneOp::Lsb ? pv == 1 : (pv == 1 || pv == 2);
-        if (keep) {
-          gfx.drawPixel(ox + x, oy + y, ink);
-        }
-      }
-    }
-  };
-
-  auto cpuMs = [](auto&& fn) {
-    const uint32_t t0 = millis();
-    fn();
-    return static_cast<unsigned long>(millis() - t0);
-  };
-
-  const unsigned long inkMs = cpuMs([&] { paint(PlaneOp::Ink); });
-
-  const char* mode = "fast";
-  // UC8253 returns from start once BUSY is low and waits in finish. The
-  // blocking base rewrites DTM1 after that wait; the LSB copy replaces it, so
-  // the split skips the extra plane (~45 ms). Other panels block in start and
-  // finish is empty. CPU paint between the two is fine. SPI is not: the
-  // controller is mid-refresh, and this bus is shared with the SD card.
-  bool baseOpen = false;
-  if (pagesUntilFullRefresh <= 1) {
-    // Clean base before gray planes so ghosting doesn't accumulate.
-    mode = "half";
-    if (gfx.combinesGrayscaleBase()) {
-      gfx.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
-    } else {
-      gfx.present(HalDisplay::HALF_REFRESH);
-      gfx.preconditionGrayscale();
-    }
-    pagesUntilFullRefresh = refreshFrequency;
-  } else {
-    gfx.startGrayscaleBase(HalDisplay::FAST_REFRESH);
-    baseOpen = true;
-    --pagesUntilFullRefresh;
-  }
-
-  const unsigned long lsbMs = cpuMs([&] { paint(PlaneOp::Lsb); });
-  if (baseOpen) {
-    gfx.finishGrayscaleBase();
-  }
-  gfx.copyGrayscaleLsbBuffers();
-
-  const unsigned long msbMs = cpuMs([&] { paint(PlaneOp::Msb); });
-  gfx.copyGrayscaleMsbBuffers();
-
-  gfx.startGrayBuffer();
-  const unsigned long rebuildMs = cpuMs([&] { paint(PlaneOp::Ink); });
-  gfx.finishGrayBuffer();
-
-  // Deferred: run on the next idle tick (flushPendingCleanup) instead of here,
-  // so its SPI housekeeping doesn't block the page the user is waiting on.
-  // drawPage() itself flushes it defensively before the next page.
-  cleanupPending = true;
-
-  error = xtch::Error::Ok;
-
-  // ink/lsb/msb/rebuild are CPU paint only. Panel and SPI times are the PERF
-  // lines printed by those calls (base, panel, precondition, spi-*, gray).
-  LOG_INF("PERF", "page %lu/%u %s hit=%d full=%d mhz=%u ink=%lums lsb=%lums msb=%lums rebuild=%lums total=%lums",
-          static_cast<unsigned long>(pageIndex + 1), header.pageCount, mode, prefetched ? 1 : 0, fullFrame ? 1 : 0,
-          static_cast<unsigned>(getCpuFrequencyMhz()), inkMs, lsbMs, msbMs, rebuildMs,
-          static_cast<unsigned long>(millis() - tPage));
-  return true;
-}
-
-void XtchBook::flushPendingCleanup(Gfx& gfx) {
-  if (!cleanupPending) {
-    return;
-  }
-  gfx.cleanupGrayscaleBuffers();
-  cleanupPending = false;
+  return drawMonoPage(gfx, pageIndex, pageWidth, pageHeight, prefetched, tPage, pagesUntilFullRefresh,
+                      refreshFrequency);
 }
 
 void XtchBook::prefetchForward(const uint32_t fromPageIndex) {

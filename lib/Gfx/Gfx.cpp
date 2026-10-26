@@ -239,25 +239,3 @@ int Gfx::lineHeight(const int fontId) const {
 }
 
 void Gfx::present(const HalDisplay::RefreshMode mode) { panel.displayBuffer(mode); }
-
-void Gfx::displayGrayscaleBase(const HalDisplay::RefreshMode fallback) { panel.displayGrayscaleBase(fallback); }
-
-void Gfx::startGrayscaleBase(const HalDisplay::RefreshMode fallback) { panel.startGrayscaleBase(fallback); }
-
-void Gfx::finishGrayscaleBase() { panel.finishGrayscaleBase(); }
-
-void Gfx::preconditionGrayscale() { panel.preconditionGrayscale(); }
-
-void Gfx::copyGrayscaleLsbBuffers() { panel.copyGrayscaleLsbBuffers(fb); }
-
-void Gfx::copyGrayscaleMsbBuffers() { panel.copyGrayscaleMsbBuffers(fb); }
-
-void Gfx::displayGrayBuffer() { panel.displayGrayBuffer(); }
-
-void Gfx::startGrayBuffer() { panel.startGrayBuffer(); }
-
-void Gfx::finishGrayBuffer() { panel.finishGrayBuffer(); }
-
-void Gfx::cleanupGrayscaleBuffers() { panel.cleanupGrayscaleBuffers(fb); }
-
-bool Gfx::combinesGrayscaleBase() const { return panel.combinesGrayscaleBase(); }

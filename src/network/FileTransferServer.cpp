@@ -408,8 +408,8 @@ void FileTransferServer::handleUploadStart() {
     return;
   }
   const char* ext = strrchr(name.c_str(), '.');
-  if (ext && strcasecmp(ext, ".xgf2") == 0) {
-    LOG_ERR("XFER", "Rejected .xgf2 upload");
+  if (ext && (strcasecmp(ext, ".xgf2") == 0 || strcasecmp(ext, ".xtch") == 0)) {
+    LOG_ERR("XFER", "Rejected %s upload", ext);
     return;
   }
   upload.destPath = joinPath(dir.empty() ? "/" : dir.c_str(), name.c_str());

@@ -17,10 +17,6 @@ const char* refreshName(const HalDisplay::RefreshMode mode) {
   }
 }
 
-// Wall time of one panel or SPI call. Serial is the tuning log for waveform vs copy.
-void logPerf(const char* what, const uint32_t started) {
-  LOG_INF("PERF", "%s %lums", what, static_cast<unsigned long>(millis() - started));
-}
 }  // namespace
 
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
@@ -71,76 +67,6 @@ void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted);
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
-
-void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
-  // X3 HALF wants a clean base. Without the resync, the gentle differential
-  // waveform ghosts the previous frame. The reader's FAST path stays differential.
-  if (gpio.deviceIsX3() && fallback == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
-  }
-  const uint32_t t0 = millis();
-  einkDisplay.displayGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
-  LOG_INF("PERF", "base %s %lums", refreshName(fallback), static_cast<unsigned long>(millis() - t0));
-}
-
-void HalDisplay::startGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && fallback == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
-  }
-  const uint32_t t0 = millis();
-  einkDisplay.startGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
-  LOG_INF("PERF", "base-start %s %lums", refreshName(fallback), static_cast<unsigned long>(millis() - t0));
-}
-
-void HalDisplay::finishGrayscaleBase() {
-  const uint32_t t0 = millis();
-  einkDisplay.finishGrayscaleBase();
-  logPerf("base-wait", t0);
-}
-
-void HalDisplay::preconditionGrayscale() {
-  const uint32_t t0 = millis();
-  einkDisplay.preconditionGrayscale();
-  logPerf("precondition", t0);
-}
-
-void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) {
-  const uint32_t t0 = millis();
-  einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer);
-  logPerf("spi-lsb", t0);
-}
-
-void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
-  const uint32_t t0 = millis();
-  einkDisplay.copyGrayscaleMsbBuffers(msbBuffer);
-  logPerf("spi-msb", t0);
-}
-
-void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
-  const uint32_t t0 = millis();
-  einkDisplay.cleanupGrayscaleBuffers(bwBuffer);
-  logPerf("cleanup", t0);
-}
-
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
-  const uint32_t t0 = millis();
-  einkDisplay.displayGrayBuffer(turnOffScreen);
-  logPerf("gray", t0);
-}
-
-void HalDisplay::startGrayBuffer(bool turnOffScreen) {
-  const uint32_t t0 = millis();
-  einkDisplay.startGrayBuffer(turnOffScreen);
-  logPerf("gray-start", t0);
-}
-
-void HalDisplay::finishGrayBuffer() {
-  const uint32_t t0 = millis();
-  einkDisplay.finishGrayBuffer();
-  logPerf("gray-wait", t0);
-}
-
-bool HalDisplay::combinesGrayscaleBase() const { return einkDisplay.combinesGrayscaleBase(); }
 
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 

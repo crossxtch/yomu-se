@@ -222,9 +222,9 @@ footer {
   <div id="dropZone">
     <div class="drop-kicker">upload</div>
     <div class="drop-title">Drop a file</div>
-    <div class="drop-sub">.xtc · .xtch · firmware .bin</div>
+    <div class="drop-sub">.xtc · firmware .bin</div>
   </div>
-  <input type="file" id="fileInput" accept=".xtc,.xtch,.bin">
+  <input type="file" id="fileInput" accept=".xtc,.bin">
   <div id="uploadProgress"><span id="uploadBar"></span></div>
   <div id="toolbar">
     <button id="cancelUpload" onclick="cancelUpload()">Cancel</button>
@@ -272,7 +272,7 @@ function resetUploadUi() {
   document.getElementById("cancelUpload").style.display = "none";
   dropZone.classList.remove("busy");
   dropZone.querySelector(".drop-title").textContent = "Drop a file";
-  dropZone.querySelector(".drop-sub").textContent = ".xtc · .xtch · firmware .bin";
+  dropZone.querySelector(".drop-sub").textContent = ".xtc · firmware .bin";
   document.getElementById("fileInput").value = "";
 }
 

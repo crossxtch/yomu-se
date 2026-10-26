@@ -47,9 +47,7 @@ int iosPtToPx(const int pt) {
 }
 
 void paintReaderCornerDots(const bool gyroOff, const bool powerOff) {
-  // Leave the current page on the panel. Resync the gray baseline so FAST
-  // only drives the markers instead of promoting to a flashing HALF.
-  gfx.cleanupGrayscaleBuffers();
+  // Leave the current page on the panel and paint only the markers.
   const int dot = iosPtToPx(8);
   if (gyroOff) {
     gfx.fillRect(1, 1, dot, dot, true);

@@ -26,7 +26,7 @@
  * See puff.c for purpose and usage.
  *
  * Vendored from https://github.com/madler/zlib/tree/master/contrib/puff
- * for XTCH page decompression (raw DEFLATE, no zlib/gzip wrapper). Chosen over
+ * for XTC page decompression (raw DEFLATE, no zlib/gzip wrapper). Chosen over
  * zlib's inflate for its tiny footprint (~4K code, <2K stack, no heap use) since
  * decode speed is not the bottleneck here (e-ink refresh dominates page turns).
  *

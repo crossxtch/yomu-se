@@ -38,19 +38,28 @@ constexpr uint8_t CMD_PARTIAL_OUT = 0x92;
 }  // namespace
 
 const Uc8253X3Config& uc8253X3DefaultConfig() {
+#if !FREEINK_BW_ONLY
   static constexpr Uc8253LutBank directGray = {
       kUltraChipDirectGray[0], kUltraChipDirectGray[4], kUltraChipDirectGray[2],
       kUltraChipDirectGray[3], kUltraChipDirectGray[1]};
+#endif
   static const Uc8253X3Config cfg = {
       {lut_x3_vcom_normal, lut_x3_ww_normal, lut_x3_bw_normal, lut_x3_wb_normal, lut_x3_bb_normal},
       {lut_x3_vcom_half, lut_x3_ww_half, lut_x3_bw_half, lut_x3_wb_half, lut_x3_bb_half},
       {lut_x3_vcom_fast, lut_x3_ww_fast, lut_x3_bw_fast, lut_x3_wb_fast, lut_x3_bb_fast},
       {lut_x3_vcom_full, lut_x3_ww_full, lut_x3_bw_full, lut_x3_wb_full, lut_x3_bb_full},
+#if FREEINK_BW_ONLY
+      {},
+      {},
+      42,
+      nullptr,
+#else
       {lut_x3_vcom_gc, lut_x3_ww_gc, lut_x3_bw_gc, lut_x3_wb_gc, lut_x3_bb_gc},
       {lut_x3_vcom_aa_pre_bw_mid, lut_x3_ww_aa_pre_bw_mid, lut_x3_bw_aa_pre_bw_mid, lut_x3_wb_aa_pre_bw_mid,
        lut_x3_bb_aa_pre_bw_mid},
       42,  // controller accepts 42 bytes of each 43-byte array
       &directGray,
+#endif
   };
   return cfg;
 }
@@ -358,6 +367,9 @@ void Uc8253X3Driver::displayFinish(EpdBus& bus, const uint8_t* fb) {
 
 void Uc8253X3Driver::beginGrayscale(EpdBus& bus, const uint8_t* fb, GrayscaleMode mode, RefreshMode fallback,
                                    bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (mode == GrayscaleMode::Direct && _cfg.directGray) {
     // Stage complete planes before the only display activation. No B/W image is
     // shown.
@@ -371,9 +383,14 @@ void Uc8253X3Driver::beginGrayscale(EpdBus& bus, const uint8_t* fb, GrayscaleMod
   }
   displayGrayscaleBase(bus, fb, fallback, turnOff);
   _absoluteInput = mode == GrayscaleMode::Absolute;
+
+#endif
 }
 
 void Uc8253X3Driver::startGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   finishGrayscaleBase(bus, fb);
   finishGray(bus, fb);
   _absoluteInput = false;
@@ -415,16 +432,26 @@ void Uc8253X3Driver::startGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshM
   fireDrf(bus);
   _pendingGrayTurnOff = turnOff;
   _pendingGrayBase = true;
+
+#endif
 }
 
 void Uc8253X3Driver::finishGrayscaleBase(EpdBus& bus, const uint8_t* fb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   if (!_pendingGrayBase) return;
   _pendingGrayBase = false;
   waitDrf(bus, _pendingGrayTurnOff, " X3_DRF");
+
+#endif
 }
 
 void Uc8253X3Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   startGrayscaleBase(bus, fb, fallback, turnOff);
   finishGrayscaleBase(bus, fb);
   if (!_grayBaseSyncDtm1) return;
@@ -435,9 +462,14 @@ void Uc8253X3Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, Refres
   bus.sendPlaneFlipped(CMD_DTM1, fb, _h, _wb);
   bus.cmd(CMD_DATA_STOP);
   _redRamSynced = true;
+
+#endif
 }
 
 void Uc8253X3Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // OEM V5.6.33 "AA-pre-BW(mid)" pass: gentle settle of the displayed BW
   // frame (DTM1 == DTM2 == frame after display()'s post-refresh DTM1 sync)
   // that leaves particles receptive to the weak grayscale nudge waveform.
@@ -474,9 +506,14 @@ void Uc8253X3Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, 
   loadBankCdi(bus, 0xA9, 0x07, _cfg.preBwMid);
   triggerRefresh(bus, /*turnOff=*/false);
   bus.cmd(CMD_PARTIAL_OUT);
+
+#endif
 }
 
 void Uc8253X3Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (_directGrayPass) {
     writeGrayscalePlaneStrip(bus, GrayPlane::Lsb, lsb, 0, _h);
     return;
@@ -488,9 +525,14 @@ void Uc8253X3Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
   bus.sendPlaneFlipped(CMD_DTM1, lsb, _h, _wb);  // LSB plane -> "old" RAM
   bus.cmd(CMD_DATA_STOP);
   _grayState.lsbValid = true;
+
+#endif
 }
 
 void Uc8253X3Driver::copyGrayscaleMsb(EpdBus &bus, const uint8_t *msb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!msb || !_grayState.lsbValid)
     return;
   if (_directGrayPass) {
@@ -499,10 +541,15 @@ void Uc8253X3Driver::copyGrayscaleMsb(EpdBus &bus, const uint8_t *msb) {
   }
   bus.sendPlaneFlipped(CMD_DTM2, msb, _h, _wb); // MSB plane -> "new" RAM
   bus.cmd(CMD_DATA_STOP);
+
+#endif
 }
 
 void Uc8253X3Driver::writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, const uint8_t* rows, uint16_t yStart,
                                               uint16_t numRows) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!rows || numRows == 0) return;
   // PTL partial-window in GATE space (logical row y lives at gate H-1-y), rows
   // emitted bottom-first so they land at the same gates the full-frame write
@@ -531,9 +578,14 @@ void Uc8253X3Driver::writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, cons
   bus.endTxn();
   bus.cmd(CMD_PARTIAL_OUT);
   if (plane == GrayPlane::Lsb) _grayState.lsbValid = true;
+
+#endif
 }
 
 void Uc8253X3Driver::startGray(EpdBus& bus, const uint8_t* fb, bool turnOff, bool factoryMode) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   finishGrayscaleBase(bus, fb);
   finishGray(bus, fb);
@@ -585,23 +637,38 @@ void Uc8253X3Driver::startGray(EpdBus& bus, const uint8_t* fb, bool turnOff, boo
   _directGrayPass = false;
   _pendingGrayTurnOff = turnOff;
   _pendingGray = true;
+
+#endif
 }
 
 void Uc8253X3Driver::finishGray(EpdBus& bus, const uint8_t* fb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   if (!_pendingGray) return;
   _pendingGray = false;
   waitDrf(bus, _pendingGrayTurnOff, " X3_DRF");
+
+#endif
 }
 
 void Uc8253X3Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut,
                                  bool factoryMode) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)lut;
   startGray(bus, fb, turnOff, factoryMode);
   finishGray(bus, fb);
+
+#endif
 }
 
 void Uc8253X3Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (_directGrayPass || _directGrayOnPanel) {
     _absoluteInput = false;
     _directGrayPass = false;
@@ -631,9 +698,14 @@ void Uc8253X3Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
   _forceFullSyncNext = false;
   _forcedConditionPassesNext = 0;
   _inGrayscaleMode = false;
+
+#endif
 }
 
 void Uc8253X3Driver::grayscaleRevert(EpdBus& bus, const uint8_t* fb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   if (!_inGrayscaleMode) return;
   _inGrayscaleMode = false;
@@ -649,6 +721,8 @@ void Uc8253X3Driver::grayscaleRevert(EpdBus& bus, const uint8_t* fb) {
   // path every page.
   _grayState.lsbValid = false;
   _redRamSynced = true;
+
+#endif
 }
 
 void Uc8253X3Driver::requestResync(uint8_t settlePasses) {

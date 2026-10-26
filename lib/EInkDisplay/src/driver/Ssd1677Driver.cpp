@@ -55,7 +55,11 @@ const Ssd1677Config& ssd1677DefaultConfig() {
       DRIVER_OUTPUT_SCAN,
       0x80,  // borderWaveformInit: stock X4 init border
       0x5A,  // HALF refresh temperature
+#if FREEINK_BW_ONLY
+      nullptr,
+#else
       lut_grayscale,
+#endif
       0xF7,  // fullSeqOverride: stock X4 full update sequence
       0xFC,  // fastSeqOverride: stock X4 partial update sequence
       0xD7,  // halfSeqOverride: stock X4 warmed/full-clean update sequence
@@ -66,7 +70,12 @@ const Ssd1677Config& ssd1677DefaultConfig() {
              // reference stage 2); same value the B/W paths leave in the register, so
              // the wire state is unchanged — just no longer relying on carry-over
       false, // grayPowerUpFirst
+#if FREEINK_BW_ONLY
+      false, // absoluteGrayscale
+      false, // overlayGrayscale
+#else
       true,  // absoluteGrayscale: verified X4 factory LUT
+#endif
   };
   return cfg;
 }
@@ -85,8 +94,12 @@ static const Ssd1677Config& ssd1677StickyConfig() {
       DRIVER_OUTPUT_SCAN,
       0x01,  // borderWaveformInit: vendor FULL/partial-clear border
       0x5A,  // halfRefreshTemp (unused once fullSeqOverride loads temperature itself)
+#if FREEINK_BW_ONLY
+      nullptr,
+#else
       lut_grayscale_sticky,  // own copy: voltage tail is per-module, tune there
                              // (see Ssd1677Luts.h), never in the shared X4 LUT
+#endif
       0xF7,  // fullSeqOverride: vendor FULL update sequence
       0xFF,  // fastSeqOverride: vendor PARTIAL/DU update sequence (the actual fast path)
       0x00,  // halfSeqOverride: use fullSeqOverride
@@ -97,7 +110,12 @@ static const Ssd1677Config& ssd1677StickyConfig() {
              // black under the grayscale LUT (black frame on every AA/cover refresh)
       true,  // grayPowerUpFirst: vendor sequences power down after every refresh, so
              // settle the rails before the short gray LUT phases (see Ssd1677Config)
+#if FREEINK_BW_ONLY
+      false, // absoluteGrayscale
+      false, // overlayGrayscale
+#else
       true,  // absoluteGrayscale
+#endif
   };
   return cfg;
 }
@@ -614,12 +632,20 @@ void Ssd1677Driver::seedPreviousFrame(EpdBus& bus, const uint8_t* buf) {
 }
 
 void Ssd1677Driver::beginGrayscale(EpdBus& bus, const uint8_t* fb, GrayscaleMode mode, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   _absoluteInput = mode == GrayscaleMode::Absolute;
   // Absolute planes supply every target pixel; activate only the final gray image.
   if (!_absoluteInput) displayGrayscaleBase(bus, fb, fallback, turnOff);
+
+#endif
 }
 
 void Ssd1677Driver::writeGrayRam(EpdBus& bus, uint8_t command, const uint8_t* data, uint16_t len) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!_absoluteInput) {
     writeRam(bus, command, data, len);
     return;
@@ -635,31 +661,51 @@ void Ssd1677Driver::writeGrayRam(EpdBus& bus, uint8_t command, const uint8_t* da
     bus.rawWriteBytes(chunk, count);
   }
   bus.endTxn();
+
+#endif
 }
 
 void Ssd1677Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!lsb) return;
   setRamArea(bus, 0, 0, _w, _h);
   writeGrayRam(bus, CMD_WRITE_RAM_BW, lsb, _bufferSize);
+
+#endif
 }
 
 void Ssd1677Driver::copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!msb) return;
   setRamArea(bus, 0, 0, _w, _h);
   writeGrayRam(bus, CMD_WRITE_RAM_RED, msb, _bufferSize);
+
+#endif
 }
 
 void Ssd1677Driver::writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, const uint8_t* rows, uint16_t yStart,
                                              uint16_t numRows) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!rows || numRows == 0) return;
   const uint16_t len = static_cast<uint16_t>(static_cast<uint32_t>(numRows) * _wb);
   const uint8_t ramCmd = (plane == GrayPlane::Lsb) ? CMD_WRITE_RAM_BW : CMD_WRITE_RAM_RED;
   setRamArea(bus, 0, yStart, _w, numRows);
   writeGrayRam(bus, ramCmd, rows, len);
+
+#endif
 }
 
 void Ssd1677Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut,
                                 bool factoryMode) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!_cfg.overlayGrayscale && !_cfg.absoluteGrayscale && lut == nullptr) {
     // Legacy callers may bypass capability negotiation; fall back to B/W.
     display(bus, fb, nullptr, RefreshMode::Full, turnOff);
@@ -701,9 +747,14 @@ void Ssd1677Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, co
 
   setCustomLut(bus, false, nullptr);
   _absoluteInput = false;
+
+#endif
 }
 
 void Ssd1677Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!bw) return;
   setRamArea(bus, 0, 0, _w, _h);
   writeRam(bus, CMD_WRITE_RAM_RED, bw, _bufferSize);
@@ -712,6 +763,8 @@ void Ssd1677Driver::cleanupGrayscaleBuffers(EpdBus& bus, const uint8_t* bw) {
   // the OEM firmware's grayscale sequence ends exactly this way, RED resync only;
   // it has no revert waveform at all).
   _inGrayscaleMode = false;
+
+#endif
 }
 
 void Ssd1677Driver::setCustomLut(EpdBus& bus, bool enabled, const unsigned char* data) {

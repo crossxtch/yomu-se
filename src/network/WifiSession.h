@@ -3,7 +3,7 @@
 class Gfx;
 
 // Lifetime of a Wi-Fi file-transfer visit. The ESP32-C3 has one DRAM heap:
-// the reader's ~100 KB page buffer and Wi-Fi/mDNS cannot both be allocated
+// the reader's ~50 KB page buffer and Wi-Fi/mDNS cannot both be allocated
 // after the framebuffer has split the heap, so this session borrows that
 // buffer and restores it by restarting when the visit ends.
 namespace WifiSession {

@@ -60,6 +60,9 @@ void Uc8279Driver::loadBank(EpdBus& bus, const uint8_t (*bank)[43]) {
 }
 
 void Uc8279Driver::loadRawBank(EpdBus& bus, const uint8_t (*bank)[49]) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // CrossPoint delta-AA encodes dark gray as WW rather than stock WB.
   // XTH4 rows are VCOM, black, light, dark, white; map them to absolute planes.
   static constexpr uint8_t aaRegisters[5] = {0x20, 0x23, 0x22, 0x21, 0x24};
@@ -68,6 +71,8 @@ void Uc8279Driver::loadRawBank(EpdBus& bus, const uint8_t (*bank)[49]) {
     bus.cmd(bank == kUc8279X3_XtfAa ? aaRegisters[t] : absoluteRegisters[t]);
     bus.data(bank[t], 49);
   }
+
+#endif
 }
 
 void Uc8279Driver::grayWindowIn(EpdBus& bus) {
@@ -80,6 +85,9 @@ void Uc8279Driver::grayWindowIn(EpdBus& bus) {
 }
 
 void Uc8279Driver::triggerGrayRefresh(EpdBus& bus, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!_isScreenOn) {
     bus.cmd(CMD_POWER_ON);
     bus.waitBusy(" 8279_gray_PON");
@@ -92,6 +100,8 @@ void Uc8279Driver::triggerGrayRefresh(EpdBus& bus, bool turnOff) {
     bus.waitBusy(" 8279_gray_POF");
     _isScreenOn = false;
   }
+
+#endif
 }
 
 // The stock init (FUN_42014ad4): a blank-MTP module needs the full register
@@ -264,6 +274,9 @@ void Uc8279Driver::deepSleep(EpdBus& bus) {
 // (raw 49-byte tables) and the single-byte CDI.
 
 void Uc8279Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   _lsbValid = false;
   if (!lsb) return;
   grayWindowIn(bus);
@@ -271,18 +284,28 @@ void Uc8279Driver::copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) {
   bus.cmd(CMD_DATA_STOP);
   bus.cmd(CMD_PARTIAL_OUT);
   _lsbValid = true;
+
+#endif
 }
 
 void Uc8279Driver::copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!msb || !_lsbValid) return;
   grayWindowIn(bus);
   bus.sendPlaneFlipped(CMD_DTM2, msb, _h, _wb);
   bus.cmd(CMD_DATA_STOP);
   bus.cmd(CMD_PARTIAL_OUT);
+
+#endif
 }
 
 void Uc8279Driver::writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, const uint8_t* rows, uint16_t yStart,
                                             uint16_t numRows) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (!rows || numRows == 0 || yStart >= _h || numRows > _h - yStart) return;
   // PTL partial-window in GATE space (logical row y lives at gate H-1-y), rows
   // emitted bottom-first so they land on the same gates the full-frame write
@@ -313,10 +336,15 @@ void Uc8279Driver::writeGrayscalePlaneStrip(EpdBus& bus, GrayPlane plane, const 
   if (plane == GrayPlane::Lsb) {
     _lsbValid = true;
   }
+
+#endif
 }
 
 void Uc8279Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, const unsigned char* lut,
                                bool factoryMode) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   (void)lut;  // waveform is the built-in XTF_AA bank
   if (!_lsbValid) return;
@@ -345,11 +373,16 @@ void Uc8279Driver::displayGray(EpdBus& bus, const uint8_t* fb, bool turnOff, con
   if (_directGrayPass)
     _initialFullsRemaining = 0;
   _directGrayPass = false;
+
+#endif
 }
 
 void Uc8279Driver::beginGrayscale(EpdBus &bus, const uint8_t *fb,
                                   GrayscaleMode mode, RefreshMode fallback,
                                   bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   _directGrayPass = mode == GrayscaleMode::Direct;
   if (_directGrayPass) {
     _lsbValid = false;
@@ -359,9 +392,14 @@ void Uc8279Driver::beginGrayscale(EpdBus &bus, const uint8_t *fb,
     return;
   }
   displayGrayscaleBase(bus, fb, fallback, turnOff);
+
+#endif
 }
 
 void Uc8279Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshMode fallback, bool turnOff) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   // OEM "AA-pre-BW(mid)" base: settle the frame with XTF_PRE_BW_MID before the
   // gray planes so particles are receptive to the weak AA nudge. When the
   // controller state can't support a clean differential (post-AA, boot fulls
@@ -399,9 +437,14 @@ void Uc8279Driver::displayGrayscaleBase(EpdBus& bus, const uint8_t* fb, RefreshM
   bus.cmd(CMD_DATA_STOP);
   bus.cmd(CMD_PARTIAL_OUT);
   _oldPlaneValid = true;
+
+#endif
 }
 
 void Uc8279Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   if (w == 0 || h == 0 || x >= _w || y >= _h) return;
   // Only safe when both planes hold the displayed B/W frame (not gray, synced).
   if (_inGrayscaleMode || !_oldPlaneValid || _lsbValid) return;
@@ -431,9 +474,14 @@ void Uc8279Driver::preconditionGrayscale(EpdBus& bus, uint16_t x, uint16_t y, ui
   loadBank(bus, kUc8279X3_XtfPreBwMid);
   triggerGrayRefresh(bus, /*turnOff=*/false);
   bus.cmd(CMD_PARTIAL_OUT);
+
+#endif
 }
 
 void Uc8279Driver::cleanupGrayscaleBuffers(EpdBus &bus, const uint8_t *bw) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   _directGrayPass = false;
   if (!bw) {
     _lsbValid = false;
@@ -452,9 +500,14 @@ void Uc8279Driver::cleanupGrayscaleBuffers(EpdBus &bus, const uint8_t *bw) {
   _lsbValid = false;
   _oldPlaneValid = true;
   _inGrayscaleMode = false;
+
+#endif
 }
 
 void Uc8279Driver::grayscaleRevert(EpdBus& bus, const uint8_t* fb) {
+#if FREEINK_BW_ONLY
+  return;
+#else
   (void)fb;
   if (!_inGrayscaleMode) return;
   _inGrayscaleMode = false;
@@ -471,6 +524,8 @@ void Uc8279Driver::grayscaleRevert(EpdBus& bus, const uint8_t* fb) {
   bus.cmd(CMD_PARTIAL_OUT);
   _oldPlaneValid = true;  // white baseline
   _lsbValid = false;
+
+#endif
 }
 
 PanelDriver& uc8279Driver() {

@@ -68,8 +68,8 @@ bool MappedInput::busyWaitPoll(int8_t /*busyPin*/, uint8_t /*busyLevel*/) {
     ++pendingCancelTaps;
   }
   // This hook consumes the edge. The main loop never sees it, so a few seconds
-  // of tap-ahead looks idle, drops the CPU to 10 MHz, and the next grayscale
-  // cleanup takes ~800 ms instead of ~90 ms.
+  // of tap-ahead looks idle, drops the CPU to 10 MHz, and the next page turn
+  // waits on a slow SPI clock.
   if (::gpio.wasAnyPressed() || ::gpio.wasAnyReleased()) {
     power::noteUserActivity(::gpio);
   }

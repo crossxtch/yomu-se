@@ -72,6 +72,10 @@ class Uc8253X3Driver : public PanelDriver {
                              uint16_t h) override;
   GrayscaleCapabilities grayscaleCapabilities(
       GrayscaleMode mode = GrayscaleMode::Overlay) const override {
+#if FREEINK_BW_ONLY
+    (void)mode;
+    return {};
+#else
     if (mode == GrayscaleMode::Direct && !_cfg.directGray) return {};
     if (mode == GrayscaleMode::Absolute || mode == GrayscaleMode::Direct)
       return {GrayscaleEncoding::AbsolutePlanes,
@@ -80,6 +84,7 @@ class Uc8253X3Driver : public PanelDriver {
     if (mode != GrayscaleMode::Overlay) return {};
     return {GrayscaleEncoding::OverlayMasks, GrayscaleBase::Separate, true,
             false, false};
+#endif
   }
   void copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) override;
   void copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) override;

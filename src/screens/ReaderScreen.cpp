@@ -1,7 +1,6 @@
 #include "ReaderScreen.h"
 
 #include <Gfx.h>
-#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -113,17 +112,6 @@ void ReaderScreen::loop() {
       requestUpdate();
     }
     return;
-  }
-
-  // Two full-frame SPI copies. Deferred so it is not inside the page the user
-  // just waited on, but a tap queued during that refresh is handled below, so
-  // this still sits on the next turn. At the 10 MHz idle clock the CPU cannot
-  // fill the SPI FIFO and the same copies take ~800 ms instead of ~90 ms.
-  // Lock only when there is work: the lock forces 160 MHz, and taking it on
-  // every idle tick fights idleDelay and toggles the clock every 50 ms.
-  if (xtch.pendingCleanup()) {
-    HalPowerManager::Lock powerLock;
-    xtch.flushPendingCleanup(gfx);
   }
 
   // Confirm retries the page that failed. Back still leaves the book.

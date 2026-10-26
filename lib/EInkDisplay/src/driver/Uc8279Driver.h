@@ -60,6 +60,10 @@ class Uc8279Driver : public PanelDriver {
                              uint16_t h) override;
   GrayscaleCapabilities grayscaleCapabilities(
       GrayscaleMode mode = GrayscaleMode::Overlay) const override {
+#if FREEINK_BW_ONLY
+    (void)mode;
+    return {};
+#else
     if (mode == GrayscaleMode::Absolute || mode == GrayscaleMode::Direct)
       return {GrayscaleEncoding::AbsolutePlanes,
               mode == GrayscaleMode::Direct ? GrayscaleBase::Combined : GrayscaleBase::Separate,
@@ -68,6 +72,7 @@ class Uc8279Driver : public PanelDriver {
       return {};
     return {GrayscaleEncoding::OverlayMasks, GrayscaleBase::Separate, true,
             false, false};
+#endif
   }
   void copyGrayscaleLsb(EpdBus& bus, const uint8_t* lsb) override;
   void copyGrayscaleMsb(EpdBus& bus, const uint8_t* msb) override;

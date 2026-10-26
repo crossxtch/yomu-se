@@ -571,6 +571,10 @@ bool FreeInkDisplay::supportsAsyncRefresh() const {
 }
 
 GrayscaleCapabilities FreeInkDisplay::grayscaleCapabilities(GrayscaleMode mode) const {
+#if FREEINK_BW_ONLY
+  (void)mode;
+  return {};
+#endif
   if (_inverted || !_driver) return {};
   auto caps = _driver->grayscaleCapabilities(mode);
   if (!caps.supported()) return {};
