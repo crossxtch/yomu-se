@@ -21,7 +21,6 @@ lib/hal               hardware wrappers
 lib/Gfx               portrait framebuffer + UI text
 lib/Xtch              XTC container + page blit
 lib/EpdFont           Ubuntu UI fonts
-reference/            CrossPoint submodule (lookup only)
 freeink-sdk/          display and board support
 ```
 
@@ -60,7 +59,7 @@ GitHub Actions builds `yomu-x3.bin`, `yomu-x4.bin`, and `yomu-x4c.bin` and attac
 
 Optional `platformio.local.ini` for a local upload port (gitignored).
 
-`reference/` is the CrossPoint Reader tree. Do not build it as this product.
+`freeink-sdk/` is a submodule.
 
 ```bash
 git submodule update --init --recursive
