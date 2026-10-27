@@ -43,19 +43,16 @@ void HalGPIO::begin() {
 #if FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4 && !FREEINK_DEVICE_X4CLASSIC
   _deviceType = DeviceType::X3;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX3);
-#elif FREEINK_DEVICE_X4 && !FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4CLASSIC
-  _deviceType = DeviceType::X4;
-  BoardConfig::selectDevice(BoardConfig::Board::XteinkX4);
 #elif FREEINK_DEVICE_X4CLASSIC && !FREEINK_DEVICE_X3 && !FREEINK_DEVICE_X4
-  // Same logical buttons as the C3 X4 (Up back, Down forward). The side keys
-  // are those two; the four bottom keys are Left, Right, Confirm, and Back.
+  // Both side keys (Up/GPIO0 and Down/GPIO7) page back in the reader. The four
+  // bottom keys are Left, Right, Confirm, and Back. A short power press is Back.
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX4Classic);
 #else
 #error "Build one device per firmware env (e.g. -DFREEINK_DEVICE_X3=1)."
 #endif
 
-  // Per-batch panel. X3: UC8253/UC8279. X4 and X4 Classic: SSD1677/UC8179/UC8279.
+  // Per-batch panel. X3: UC8253/UC8279. X4 Classic: SSD1677/UC8179/UC8279.
   // Probe before SPI owns the display pins. X3's facade keys off the sibling
   // board profile. X4 Classic has no MISO; the probe reads VER half-duplex.
   freeink::applyXteinkDisplayController();
@@ -63,25 +60,16 @@ void HalGPIO::begin() {
   if (BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279) {
     BoardConfig::selectDevice(BoardConfig::Board::XteinkX3Uc8279);
   }
-#endif
-
-#if FREEINK_DEVICE_X3 || FREEINK_DEVICE_X4
   // C3 display bus. X4 Classic pins come from the board profile inside
   // display.begin(); claiming these GPIOs would steal its buttons and reset.
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
-#endif
-
-#if FREEINK_DEVICE_X4
-  pinMode(BAT_GPIO0, INPUT);
-  pinMode(UART0_RXD, INPUT);
 #endif
   inputMgr.begin();
 }
 
 const char* HalGPIO::shortName() const {
   if (deviceIsX3()) return "x3";
-  if (BoardConfig::isX4Classic()) return "x4c";
-  return "x4";
+  return "x4c";
 }
 
 void HalGPIO::update() { inputMgr.update(); }
@@ -98,16 +86,9 @@ bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
-bool HalGPIO::hasEdgeSideButtons() const {
-  return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro;
-}
-
 bool HalGPIO::isXteinkDevice() const {
   return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279;
 }
 
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {

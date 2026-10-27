@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag like v0.1.0 (must match [yomu] version in platformio.ini).
-# Builds x3, x4, and x4c and attaches the .bin files to a GitHub Release.
+# Builds x3 and x4c and attaches the .bin files to a GitHub Release.
 
 on:
   push:
@@ -20,8 +20,6 @@ jobs:
         include:
           - pio_env: x3
             asset: yomu-x3.bin
-          - pio_env: x4
-            asset: yomu-x4.bin
           - pio_env: x4c
             asset: yomu-x4c.bin
     steps:
@@ -82,15 +80,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTES: |
-            Download the .bin for your device. Copy it to the SD card, then Settings → Update firmware. Recovery at wake is Up + Power on the X3 and X4, and Down + Power on the X4 Classic.
+            Download the .bin for your device. Copy it to the SD card, then Settings → Update firmware. Recovery at wake is Up + Power on the X3, and Down + Power on the X4 Classic.
 
             - `yomu-x3.bin` — Xteink X3 (528×792 pages)
-            - `yomu-x4.bin` — Xteink X4 (480×800 pages)
             - `yomu-x4c.bin` — Xteink X4 Classic (480×800 pages)
         run: |
           gh release create "${{ github.ref_name }}" \
             dist/yomu-x3.bin \
-            dist/yomu-x4.bin \
             dist/yomu-x4c.bin \
             --repo "${{ github.repository }}" \
             --title "${{ github.ref_name }}" \

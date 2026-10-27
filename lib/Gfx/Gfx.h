@@ -5,8 +5,8 @@
 
 #include <cstdint>
 
-// Portrait drawing surface. Panel is landscape (X3 792×528, X4 800×480);
-// logical size is swapped (X3 528×792, X4 480×800).
+// Portrait drawing surface. Panel is landscape (X3 792×528, X4 Classic 800×480);
+// logical size is swapped (X3 528×792, X4 Classic 480×800).
 class Gfx {
  public:
   explicit Gfx(HalDisplay& display);

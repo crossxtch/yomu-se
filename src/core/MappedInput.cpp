@@ -4,6 +4,7 @@
 #include <HalTiltSensor.h>
 
 #include "core/Power.h"
+#include "core/ScreenManager.h"
 #include "core/Settings.h"
 
 uint16_t MappedInput::pendingForwardTaps = 0;
@@ -46,25 +47,27 @@ bool MappedInput::isPressed(const Button button) const { return gpio.isPressed(m
 void MappedInput::update() {
   gpio.update();
   confirmLatched = gpio.wasReleased(HalGPIO::BTN_CONFIRM) || consumePendingConfirmTaps() > 0;
-  backLatched = gpio.wasReleased(HalGPIO::BTN_BACK) || consumePendingCancelTaps() > 0;
+  backLatched = gpio.wasReleased(HalGPIO::BTN_BACK) || power::isShortPowerRelease(gpio) ||
+                consumePendingCancelTaps() > 0;
 }
 
 // Catch release edges the main loop misses during a blocking refresh.
 bool MappedInput::busyWaitPoll(int8_t /*busyPin*/, uint8_t /*busyLevel*/) {
   ::gpio.update();
   power::pollForHold(::gpio);
-  const bool edgeSides = ::gpio.hasEdgeSideButtons();
-  if (::gpio.wasReleased(HalGPIO::BTN_DOWN) || ::gpio.wasReleased(HalGPIO::BTN_RIGHT) ||
-      (edgeSides && ::gpio.wasReleased(HalGPIO::BTN_UP))) {
+  // Reader only. In a menu the same two keys still move the list.
+  const bool readerPrev = screenManager.isReader();
+  if ((!readerPrev && ::gpio.wasReleased(HalGPIO::BTN_DOWN)) || ::gpio.wasReleased(HalGPIO::BTN_RIGHT)) {
     ++pendingForwardTaps;
   }
-  if (::gpio.wasReleased(HalGPIO::BTN_LEFT) || (!edgeSides && ::gpio.wasReleased(HalGPIO::BTN_UP))) {
+  if (::gpio.wasReleased(HalGPIO::BTN_LEFT) || ::gpio.wasReleased(HalGPIO::BTN_UP) ||
+      (readerPrev && ::gpio.wasReleased(HalGPIO::BTN_DOWN))) {
     ++pendingBackTaps;
   }
   if (::gpio.wasReleased(HalGPIO::BTN_CONFIRM)) {
     ++pendingConfirmTaps;
   }
-  if (::gpio.wasReleased(HalGPIO::BTN_BACK)) {
+  if (::gpio.wasReleased(HalGPIO::BTN_BACK) || power::isShortPowerRelease(::gpio)) {
     ++pendingCancelTaps;
   }
   // This hook consumes the edge. The main loop never sees it, so a few seconds
@@ -128,12 +131,11 @@ int MappedInput::consumeNavigationDelta() {
 
 int MappedInput::consumeReaderPageDelta() {
   int delta = 0;
-  const bool edgeSides = gpio.hasEdgeSideButtons();
-  if (wasReleased(Button::PageForward) || wasReleased(Button::Right) || wasReleased(Button::Down) ||
-      (edgeSides && wasReleased(Button::Up))) {
+  if (wasReleased(Button::Right)) {
     ++delta;
   }
-  if (wasReleased(Button::Left) || (!edgeSides && wasReleased(Button::Up))) {
+  if (wasReleased(Button::Left) || wasReleased(Button::Up) || wasReleased(Button::PageBack) ||
+      wasReleased(Button::PageForward) || wasReleased(Button::Down)) {
     --delta;
   }
   // A flick pages forward, in either direction.

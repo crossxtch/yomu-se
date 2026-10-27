@@ -136,7 +136,7 @@ void setup() {
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Native USB on the S3 shares the cable with serial. Sleeping here loops
-      // a replug straight back into sleep. The C3 boards charge-sleep instead.
+      // a replug straight back into sleep. The X3 charge-sleeps instead.
       if (BoardConfig::isX4Classic()) {
         LOG_INF("MAIN", "USB-power wake, staying up");
         break;

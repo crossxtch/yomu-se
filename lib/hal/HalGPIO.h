@@ -3,8 +3,7 @@
 #include <Arduino.h>
 #include <InputManager.h>
 
-// Display SPI. Shared with the SD card (MISO). X4 uses these custom pins,
-// not the hardware SPI defaults.
+// X3 display SPI. Shared with the SD card (MISO).
 #define EPD_SCLK 8
 #define EPD_MOSI 10
 #define EPD_CS 21
@@ -12,9 +11,6 @@
 #define EPD_RST 5
 #define EPD_BUSY 6
 #define SPI_MISO 7
-
-#define BAT_GPIO0 0   // X4 battery ADC
-#define UART0_RXD 20  // X4 USB connection detect
 
 // TI BQ27220 Current(). X3 has no USB-detect GPIO, so charging current stands in.
 #define I2C_ADDR_BQ27220 0x55
@@ -28,11 +24,9 @@ class HalGPIO {
 
   bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
 
-  // "x3", "x4", or "x4c". X4 Classic keeps DeviceType::X4: it is not an X3.
+  // "x3" or "x4c". X4 Classic keeps DeviceType::X4: it is not an X3.
   const char* shortName() const;
 
-  // Page buttons on the left/right screen edges (X3) rather than an off-screen rocker.
-  bool hasEdgeSideButtons() const;
   bool isXteinkDevice() const;
 
   void begin();

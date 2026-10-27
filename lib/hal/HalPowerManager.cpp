@@ -13,9 +13,8 @@
 
 HalPowerManager powerManager;  // Singleton instance
 
-// GPIO13 controls the X4 battery latch and the X3 SD power rail on the C3
-// Xteink boards. Other boards use it for unrelated signals, including the
-// X4 Pro display chip select.
+// GPIO13 gates the X3 battery MOSFET. Other boards use it for unrelated
+// signals, including the X4 Pro display chip select.
 static constexpr gpio_num_t XTEINK_C3_GPIO13 = GPIO_NUM_13;
 
 void HalPowerManager::begin() {
@@ -73,8 +72,8 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 
 #if !SOC_PM_SUPPORT_EXT1_WAKEUP
   if (gpio.isXteinkDevice()) {
-    // GPIO13 gates the battery MOSFET on both Xteink C3 boards; driving it low
-    // is the battery power-off (the SDK wake source still handles USB power).
+    // GPIO13 gates the battery MOSFET on the X3; driving it low is the battery
+    // power-off (the SDK wake source still handles USB power).
     // Release any surviving pad hold first: hold_en survives deep sleep via
     // the SDK's deepSleep() (esp_sleep_config_gpio_isolate +
     // gpio_deep_sleep_hold_en), and a held pad silently ignores the drive.
@@ -88,7 +87,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // Cut the gated peripheral rails (touch/SD/EPD on boards like the Sticky) and
   // hold the enables off through deep sleep — otherwise the GT911 and SD card
   // stay powered all through "off" and drain the battery. No-op on boards with
-  // no switched rails (X4/X3). Trade-off: no touch-to-wake; wake is the power
+  // no switched rails (X3 and X4 Classic). Trade-off: no touch-to-wake; wake is the power
   // button. Must run after display.deepSleep() so the panel controller gets its
   // deep-sleep command while its rail is still up (enterDeepSleep() in main.cpp
   // guarantees that ordering).

@@ -41,7 +41,7 @@ void paintDeepSleepWhite() {
 }
 
 int iosPtToPx(const int pt) {
-  // iOS point: 1pt = 1/163 inch. X3 3.7" 528×792 ≈ 259 PPI; X4 4.26" 800×480 ≈ 219 PPI.
+  // iOS point: 1pt = 1/163 inch. X3 3.7" 528×792 ≈ 259 PPI; X4 Classic 4.26" 800×480 ≈ 219 PPI.
   const int ppi = gpio.deviceIsX3() ? 259 : 219;
   return (pt * ppi + 163 / 2) / 163;
 }
@@ -159,22 +159,22 @@ bool power::maybeSleep(HalGPIO& gpio, const Settings& settings) {
   return false;
 }
 
+bool power::isShortPowerRelease(HalGPIO& gpio) {
+  if (wakePowerReleasePending) {
+    return false;
+  }
+  return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= kShortPressMs;
+}
+
 bool power::tiltLocked() { return tiltLock; }
 
 void power::paintGyroOffMarker() { paintReaderCornerDots(true, false); }
 
 bool power::maybeToggleTiltLock(HalGPIO& gpio) {
-  // The wake-hold release (finger still down right after waking from deep
-  // sleep) must not also toggle the gyro lock.
+  // The release that ends a wake hold is not a key the user meant to press.
   if (wakePowerReleasePending) {
     return false;
   }
-
-  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= kShortPressMs) {
-    setTiltLock(!tiltLock);
-    return true;
-  }
-
   if (tiltLock && (gpio.wasAnyPressed() || gpio.wasAnyReleased())) {
     setTiltLock(false);
   }

@@ -17,10 +17,14 @@ void pollForHold(HalGPIO& gpio);
 bool maybeSleep(HalGPIO& gpio, const Settings& settings);
 void idleDelay();
 
-// Short power-button press (released before the deep-sleep hold) toggles a
-// gyroscope lock so picking up the device cannot turn pages. Any other key
-// press clears the lock and is still handled normally. Idle timer: gyro
-// auto-off → the same lock. A long power hold still deep-sleeps.
+// True on the frame a power press is released before the deep-sleep hold.
+// The release that ends a wake hold is not a short press. MappedInput treats
+// this as Back. A long power hold still deep-sleeps.
+bool isShortPowerRelease(HalGPIO& gpio);
+
+// Idle timeout locks the gyroscope so picking the device up cannot turn pages.
+// Any key press clears the lock and is still handled. A long power hold still
+// deep-sleeps.
 bool tiltLocked();
 bool maybeToggleTiltLock(HalGPIO& gpio);
 // 8pt top-left marker on the current reader page. Call after a page blit
